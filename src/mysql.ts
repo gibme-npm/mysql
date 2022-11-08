@@ -2,7 +2,7 @@
 //
 // Please see the included LICENSE file for more information.
 
-import { createPool, escape, Pool, PoolConfig, PoolConnection } from 'mysql';
+import { createPool, Pool, PoolConfig, PoolConnection } from 'mysql';
 import { EventEmitter } from 'events';
 import { Column, ForeignKey, ForeignKeyConstraint, Query, QueryResult, ValueArray } from './types';
 import { format } from 'util';
@@ -138,7 +138,7 @@ export default class MySQL extends EventEmitter {
      */
     public async multiInsert (
         table: string,
-        columns: string[],
+        columns: string[] = [],
         values: ValueArray,
         useTransaction = true
     ): Promise<QueryResult> {
@@ -219,13 +219,40 @@ export default class MySQL extends EventEmitter {
      */
     public prepareMultiInsert (
         table: string,
-        columns: string[],
+        columns: string[] = [],
         values: ValueArray
     ): Query {
-        const query = `INSERT INTO ${table} (${columns.join(',')}) VALUES %L`;
+        const toPlaceholders = (arr: any[]): string => {
+            return arr.map(() => '?')
+                .join(',');
+        };
+
+        if (values.length === 0) {
+            throw new Error('Must supply values');
+        }
+
+        if (columns.length !== 0) {
+            for (const _values of values) {
+                if (_values.length !== columns.length) {
+                    throw new Error('Column count does not match values count');
+                }
+            }
+        }
+
+        const placeholders: string[] = [];
+        const parameters: any[] = [];
+
+        const _columns = columns.length !== 0 ? ` (${columns.join(',')})` : '';
+        const placeholder = columns.length !== 0 ? `(${toPlaceholders(columns)})` : `(${toPlaceholders(values[0])})`;
+
+        for (const _values of values) {
+            placeholders.push(placeholder);
+            parameters.push(..._values);
+        }
 
         return {
-            query: query.replace('%L', escape(values))
+            query: `INSERT INTO ${table}${_columns} VALUES ${placeholders.join(',')}`.trim(),
+            values: parameters
         };
     }
 
@@ -246,6 +273,10 @@ export default class MySQL extends EventEmitter {
         columns: string[],
         values: ValueArray
     ): Query {
+        if (columns.length === 0) {
+            throw new Error('Must specify columns for multi-update');
+        }
+
         const query = this.prepareMultiInsert(table, columns, values);
 
         const updates: string[] = [];
@@ -255,7 +286,7 @@ export default class MySQL extends EventEmitter {
                 continue;
             }
 
-            updates.push(` ${column} = VALUES(${column})`);
+            updates.push(`${column} = VALUES(${column})`);
         }
 
         query.query += ` ON DUPLICATE KEY UPDATE ${updates.join(',')}`;

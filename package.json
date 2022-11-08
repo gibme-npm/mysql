@@ -1,6 +1,6 @@
 {
   "name": "@gibme/mysql",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A simple helper/wrapper for MySQL/MariaDB",
   "main": "dist/mysql.js",
   "types": "dist/mysql.d.ts",
@@ -33,7 +33,6 @@
   },
   "dependencies": {
     "@types/mysql": "^2.15.21",
-    "dotenv": "^16.0.3",
     "mysql": "^2.18.1"
   },
   "devDependencies": {
