@@ -1,13 +1,30 @@
-// Copyright (c) 2016-2022 Brandon Lehmann
+// Copyright (c) 2016-2022, Brandon Lehmann <brandonlehmann@gmail.com>
 //
-// Please see the included LICENSE file for more information.
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
 
-import { createPool, Pool, PoolConfig, PoolConnection } from 'mysql';
+import { createPool, escapeId, escape, Pool, PoolConfig, PoolConnection } from 'mysql';
 import { EventEmitter } from 'events';
-import { Column, ForeignKey, ForeignKeyConstraint, Query, QueryResult, ValueArray } from './types';
 import { format } from 'util';
+import { Column, ForeignKey, ForeignKeyConstraint, Query, QueryMetaData, QueryResult, ValueArray } from './types';
 
-export { ForeignKey, ForeignKeyConstraint, Column, Query, ValueArray, PoolConfig };
+export { PoolConfig, escapeId, escape };
+export { Column, ForeignKey, ForeignKeyConstraint, Query, QueryResult, ValueArray, QueryMetaData };
 
 export default class MySQL extends EventEmitter {
     public readonly pool: Pool;
@@ -18,11 +35,13 @@ export default class MySQL extends EventEmitter {
      *
      * @param config
      */
-    constructor (public readonly config: PoolConfig) {
+    constructor (public readonly config: PoolConfig & { rejectUnauthorized?: boolean }) {
         super();
 
+        config.rejectUnauthorized ??= false;
+
         config.ssl ||= {
-            rejectUnauthorized: true
+            rejectUnauthorized: config.rejectUnauthorized
         };
 
         this.pool = createPool(config);
@@ -92,6 +111,63 @@ export default class MySQL extends EventEmitter {
     }
 
     /**
+     * Switches the default database referenced by the connection
+     *
+     * @param database
+     */
+    public async use (database: string): Promise<QueryResult> {
+        const result = await this.query(`USE ${escapeId(database)}`);
+
+        this.config.database = database;
+
+        return result;
+    }
+
+    /**
+     * Lists the tables in the specified database
+     *
+     * @param database
+     */
+    public async listTables (
+        database = this.config.database
+    ): Promise<string[]> {
+        let query = 'SHOW TABLES';
+
+        if (database) {
+            query += ` FROM ${escapeId(database)}`;
+        }
+
+        const [rows] = await this.query(query);
+
+        return rows.map(row => {
+            const key = Object.keys(row)[0];
+
+            return row[key];
+        });
+    }
+
+    /**
+     * Drop the tables from the database
+     *
+     * @param tables
+     */
+    public async dropTable (tables: string | string[]): Promise<QueryResult[]> {
+        if (!Array.isArray(tables)) {
+            tables = [tables];
+        }
+
+        const queries: Query[] = [];
+
+        for (const table of tables) {
+            queries.push({
+                query: `DROP TABLE IF EXISTS ${escapeId(table)}`
+            });
+        }
+
+        return this.transaction(queries);
+    }
+
+    /**
      * Performs an individual query and returns the result
      *
      * @param query
@@ -121,7 +197,10 @@ export default class MySQL extends EventEmitter {
                     changedRows: results.changedRows || 0,
                     affectedRows: results.affectedRows || 0,
                     insertId: results.insertId || 0,
-                    length: results.length
+                    length: results.length || 0
+                }, {
+                    query: query as string,
+                    values
                 }]);
             });
         });
@@ -242,7 +321,7 @@ export default class MySQL extends EventEmitter {
         const placeholders: string[] = [];
         const parameters: any[] = [];
 
-        const _columns = columns.length !== 0 ? ` (${columns.join(',')})` : '';
+        const _columns = columns.length !== 0 ? ` (${columns.map(elem => escapeId(elem)).join(',')})` : '';
         const placeholder = columns.length !== 0 ? `(${toPlaceholders(columns)})` : `(${toPlaceholders(values[0])})`;
 
         for (const _values of values) {
@@ -277,6 +356,10 @@ export default class MySQL extends EventEmitter {
             throw new Error('Must specify columns for multi-update');
         }
 
+        if (primaryKey.length === 0) {
+            throw new Error('Must specify primary key column(s) for multi-update');
+        }
+
         const query = this.prepareMultiInsert(table, columns, values);
 
         const updates: string[] = [];
@@ -286,7 +369,7 @@ export default class MySQL extends EventEmitter {
                 continue;
             }
 
-            updates.push(`${column} = VALUES(${column})`);
+            updates.push(`${escapeId(column)} = VALUES(${escapeId(column)})`);
         }
 
         query.query += ` ON DUPLICATE KEY UPDATE ${updates.join(',')}`;
@@ -309,9 +392,11 @@ export default class MySQL extends EventEmitter {
         primaryKey: string[],
         tableOptions = this.tableOptions
     ): Query[] {
+        name = escapeId(name);
+
         const sqlToQuery = (sql: string, values: any[] = []): Query => {
             return {
-                query: sql,
+                query: sql.trim(),
                 values
             };
         };
@@ -319,25 +404,24 @@ export default class MySQL extends EventEmitter {
         const values: any[] = [];
 
         const _fields = fields.map(column => {
-            if (column.default) {
+            if (typeof column.default !== 'undefined') {
                 values.push(column.default);
             }
 
             return format('%s %s %s %s',
-                column.name,
+                escapeId(column.name),
                 column.type.toUpperCase(),
                 !column.nullable ? 'NOT NULL' : 'NULL',
-                column.default ? 'DEFAULT ?' : '')
+                typeof column.default !== 'undefined' ? 'DEFAULT ?' : '')
                 .trim();
         });
 
         const _unique = fields.filter(elem => elem.unique === true)
             .map(column => format('CREATE UNIQUE INDEX IF NOT EXISTS %s_unique_%s ON %s (%s)',
                 name,
-                column.name,
+                escapeId(column.name),
                 name,
-                column.name)
-                .trim());
+                escapeId(column.name.trim())));
 
         const constraint_fmt = ', CONSTRAINT %s_%s_foreign_key FOREIGN KEY (%s) REFERENCES %s (%s)';
 
@@ -347,8 +431,8 @@ export default class MySQL extends EventEmitter {
             if (field.foreignKey) {
                 let constraint = format(constraint_fmt,
                     name,
-                    field.name,
-                    field.name,
+                    escapeId(field.name),
+                    escapeId(field.name),
                     field.foreignKey.table,
                     field.foreignKey.column);
 
@@ -445,3 +529,5 @@ export default class MySQL extends EventEmitter {
         });
     }
 }
+
+export { MySQL };
