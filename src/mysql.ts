@@ -21,10 +21,10 @@
 import { createPool, escapeId, escape, Pool, PoolConfig, PoolConnection } from 'mysql';
 import { EventEmitter } from 'events';
 import { format } from 'util';
-import { Column, ForeignKey, ForeignKeyConstraint, Query, QueryMetaData, QueryResult, ValueArray } from './types';
+import { Column, ForeignKey, ForeignKeyConstraint, Query, QueryMetaData, QueryResult } from './types';
 
 export { PoolConfig, escapeId, escape };
-export { Column, ForeignKey, ForeignKeyConstraint, Query, QueryResult, ValueArray, QueryMetaData };
+export { Column, ForeignKey, ForeignKeyConstraint, Query, QueryResult, QueryMetaData };
 
 export default class MySQL extends EventEmitter {
     public readonly pool: Pool;
@@ -218,7 +218,7 @@ export default class MySQL extends EventEmitter {
     public async multiInsert (
         table: string,
         columns: string[] = [],
-        values: ValueArray,
+        values: any[][],
         useTransaction = true
     ): Promise<QueryResult> {
         const query = this.prepareMultiInsert(table, columns, values);
@@ -245,7 +245,7 @@ export default class MySQL extends EventEmitter {
         table: string,
         primaryKey: string[],
         columns: string[],
-        values: ValueArray,
+        values: any[][],
         useTransaction = true
     ): Promise<QueryResult> {
         const query = this.prepareMultiUpdate(table, primaryKey, columns, values);
@@ -299,7 +299,7 @@ export default class MySQL extends EventEmitter {
     public prepareMultiInsert (
         table: string,
         columns: string[] = [],
-        values: ValueArray
+        values: any[][]
     ): Query {
         const toPlaceholders = (arr: any[]): string => {
             return arr.map(() => '?')
@@ -350,7 +350,7 @@ export default class MySQL extends EventEmitter {
         table: string,
         primaryKey: string[],
         columns: string[],
-        values: ValueArray
+        values: any[][]
     ): Query {
         if (columns.length === 0) {
             throw new Error('Must specify columns for multi-update');

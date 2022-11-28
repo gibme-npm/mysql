@@ -32,8 +32,6 @@ export interface Query {
 
 export type QueryResult<RecordType = any> = [RecordType[], QueryMetaData, Query];
 
-export type ValueArray = any[][];
-
 export enum ForeignKeyConstraint {
     RESTRICT = 'RESTRICT',
     CASCADE = 'CASCADE',

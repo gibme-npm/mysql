@@ -1,5 +1,11 @@
 # Simple MySQL/MariaDB Pool Helper/Wrapper
 
+## Documentation
+
+[https://gibme-npm.github.io/mysql/](https://gibme-npm.github.io/mysql/)
+
+## Sample Code
+
 ```typescript
 import MySQL from "@gibme/mysql";
 
