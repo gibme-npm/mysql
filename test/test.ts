@@ -18,7 +18,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-import assert from 'assert';
+import * as assert from 'assert';
 import { describe, it } from 'mocha';
 import MySQL, { escapeId } from '../src/mysql';
 import * as dotenv from 'dotenv';
@@ -66,7 +66,7 @@ describe('Unit Tests', () => {
         it('Version', async () => {
             const [rows] = await mysql.query<{version: string}>('SELECT VERSION() as version');
 
-            assert(rows.length !== 0);
+            assert.notEqual(rows.length, 0);
         });
     });
 
@@ -87,7 +87,7 @@ describe('Unit Tests', () => {
         it('List', async () => {
             const tables = await mysql.listTables();
 
-            assert(tables.includes(test_table));
+            assert.equal(tables.includes(test_table), true);
         });
 
         it(`Drop ${second_table}`, async () => {
@@ -105,7 +105,7 @@ describe('Unit Tests', () => {
             {
                 const tables = await mysql.listTables();
 
-                assert(tables.includes(second_table));
+                assert.equal(tables.includes(second_table), true);
             }
 
             await mysql.dropTable(second_table);
@@ -113,7 +113,7 @@ describe('Unit Tests', () => {
             {
                 const tables = await mysql.listTables();
 
-                assert(!tables.includes(second_table));
+                assert.equal(tables.includes(second_table), false);
             }
         });
     });
@@ -146,7 +146,7 @@ describe('Unit Tests', () => {
                 [values[0][0]]
             );
 
-            assert(rows[0].column2 === 1);
+            assert.equal(rows[0].column2, 1);
         });
 
         it('Delete', async () => {
@@ -155,7 +155,7 @@ describe('Unit Tests', () => {
                 [values[0][0]]
             );
 
-            assert(meta.affectedRows === 1);
+            assert.equal(meta.affectedRows, 1);
         });
 
         it('Update', async () => {
@@ -169,7 +169,7 @@ describe('Unit Tests', () => {
                 [values[1][0]]
             );
 
-            assert(rows[0].column2 === 5);
+            assert.equal(rows[0].column2, 5);
         });
     });
 });

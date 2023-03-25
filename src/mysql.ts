@@ -38,13 +38,13 @@ export default class MySQL extends EventEmitter {
     constructor (public readonly config: PoolConfig & { rejectUnauthorized?: boolean }) {
         super();
 
-        config.rejectUnauthorized ??= false;
+        this.config.rejectUnauthorized ??= false;
 
-        config.ssl ||= {
-            rejectUnauthorized: config.rejectUnauthorized
+        this.config.ssl ||= {
+            rejectUnauthorized: this.config.rejectUnauthorized
         };
 
-        this.pool = createPool(config);
+        this.pool = createPool(this.config);
 
         this.pool.on('error', error => this.emit('error', error));
         this.pool.on('acquire', connection => this.emit('acquire', connection));
@@ -330,7 +330,7 @@ export default class MySQL extends EventEmitter {
         }
 
         return {
-            query: `INSERT INTO ${table}${_columns} VALUES ${placeholders.join(',')}`.trim(),
+            query: `INSERT INTO ${escapeId(table)}${_columns} VALUES ${placeholders.join(',')}`.trim(),
             values: parameters
         };
     }
@@ -393,6 +393,7 @@ export default class MySQL extends EventEmitter {
         tableOptions = this.tableOptions
     ): Query[] {
         name = escapeId(name);
+        primaryKey = primaryKey.map(column => escapeId(column));
 
         const sqlToQuery = (sql: string, values: any[] = []): Query => {
             return {
