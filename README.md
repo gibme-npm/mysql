@@ -1,3 +1,5 @@
+# THIS PACKAGE IS DEPRECATED. PLEASE SEE [@gibme/sql](https://github.com/gibme-npm/sql)
+
 # Simple MySQL/MariaDB Pool Helper/Wrapper
 
 ## Documentation
